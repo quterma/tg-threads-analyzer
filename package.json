@@ -14,10 +14,12 @@
   "type": "module",
   "dependencies": {
     "dotenv": "^17.2.3",
+    "prompts": "^2.4.2",
     "telegram": "^2.26.22"
   },
   "devDependencies": {
     "@types/node": "^24.8.1",
+    "@types/prompts": "^2.4.9",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }
