@@ -1,2 +1,4 @@
-import { initClient } from "./telegram";
-console.log("OK");
+import { initClient } from "./telegram.js";
+(async () => {
+  console.log(await initClient());
+})();
