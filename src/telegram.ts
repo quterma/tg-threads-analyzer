@@ -1,6 +1,6 @@
 import fs from "fs";
 import prompts from "prompts";
-import { TelegramClient } from "telegram";
+import { TelegramClient, Api } from "telegram";
 import sessionsPkg from "telegram/sessions/index.js";
 const { StringSession } = sessionsPkg;
 
@@ -72,4 +72,55 @@ export async function initClient() {
   console.log("💾 Session saved to", sessionFile);
 
   return client;
+}
+
+export type RawMsg = {
+  id: number;
+  date: Date;
+  fromId?: number;
+  text?: string;
+  replyToTopId?: number;
+  replyToId?: number;
+  topicId?: number;
+};
+
+function asDate(x: any): Date {
+  return typeof x === "number" ? new Date(x * 1000) : new Date(x);
+}
+
+export async function fetchMessages(
+  client: any,
+  chat: string | number,
+  since: Date
+): Promise<RawMsg[]> {
+  const peer = await client.getEntity(chat);
+  const limit = 100;
+  let offsetId = 0;
+  const all: RawMsg[] = [];
+
+  while (true) {
+    const res = await client.invoke(
+      new Api.messages.GetHistory({ peer, limit, addOffset: 0, offsetId })
+    );
+    const msgs = ("messages" in res ? res.messages : []) as any[];
+    if (!msgs.length) break;
+
+    for (const m of msgs) {
+      const msgDate = new Date(m.date * 1000);
+      if (msgDate < since) return all;
+      all.push({
+        id: m.id,
+        date: msgDate,
+        fromId: m.fromId?.userId ?? m.fromId,
+        replyToId: m.replyTo?.replyToMsgId,
+        replyToTopId: m.replyTo?.replyToTopId,
+        topicId: m.forumTopic?.topThreadMessage ?? m.topicId,
+        text: m.message,
+      });
+    }
+
+    offsetId = msgs[msgs.length - 1].id;
+  }
+
+  return all;
 }
