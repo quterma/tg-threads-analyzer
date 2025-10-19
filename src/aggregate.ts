@@ -13,8 +13,15 @@ export function localDay(d: Date, tz: string): string {
 
 export type ThreadKey = string;
 
-export function threadKey(m: RawMsg): ThreadKey {
-  return String(m.replyToTopId ?? m.topicId ?? m.replyToId ?? m.id);
+export function threadKey(m: RawMsg): ThreadKey | undefined {
+  if (m.replyToTopId != null) return String(m.replyToTopId); // форум/корень цепочки
+  if (m.topicId != null) return String(m.topicId); // форум-топики
+  if (m.replyToId != null) return String(m.replyToId); // ответ на сообщение
+  return undefined; // одиночка — не считаем как тред
+}
+
+function authorId(m: RawMsg): number | undefined {
+  return m.fromId;
 }
 
 export type ThreadStats = {
@@ -27,6 +34,8 @@ export function countThreads(msgs: RawMsg[]): Map<string, ThreadStats> {
   const byThread = new Map<string, ThreadStats>();
   for (const m of msgs) {
     const k = threadKey(m);
+    if (k === undefined) continue; // <-- ключ: игнорим одиночные сообщения
+
     const s = byThread.get(k) ?? { messages: 0, users: new Set<number>() };
     s.messages += 1;
     if (m.fromId != null) s.users.add(m.fromId);
@@ -52,8 +61,9 @@ export function buildReport(msgs: RawMsg[], tz = "Asia/Tashkent") {
   }
 
   const days: ReportDay[] = [];
-  for (const [date, arr] of byDay.entries()) {
-    const threads = [...countThreads(arr).entries()].map(([_, s]) => ({
+  for (const date of [...byDay.keys()].sort()) {
+    const arr = byDay.get(date)!;
+    const threads = [...countThreads(arr).entries()].map(([, s]) => ({
       topic: s.firstText ?? "(no title)",
       messages: s.messages,
       users: s.users.size,

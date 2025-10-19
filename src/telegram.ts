@@ -88,6 +88,22 @@ function asDate(x: any): Date {
   return typeof x === "number" ? new Date(x * 1000) : new Date(x);
 }
 
+function normalizeFromId(m: any): number | undefined {
+  const f = m?.fromId;
+  if (!f) return undefined;
+  if (typeof f === "number" || typeof f === "bigint") return Number(f);
+  if (typeof f === "string") return Number(f);
+  if (typeof f === "object" && "userId" in f) return Number((f as any).userId);
+  if (
+    typeof f === "object" &&
+    "peerId" in f &&
+    (f as any).peerId?.userId != null
+  ) {
+    return Number((f as any).peerId.userId);
+  }
+  return undefined;
+}
+
 export async function fetchMessages(
   client: any,
   chat: string | number,
@@ -106,21 +122,41 @@ export async function fetchMessages(
     if (!msgs.length) break;
 
     for (const m of msgs) {
-      const msgDate = new Date(m.date * 1000);
+      const msgDate = asDate(m.date);
       if (msgDate < since) return all;
-      all.push({
-        id: m.id,
+
+      const rt = m.replyTo ?? {};
+      const obj: any = {
+        id: m.id as number,
         date: msgDate,
-        fromId: m.fromId?.userId ?? m.fromId,
-        replyToId: m.replyTo?.replyToMsgId,
-        replyToTopId: m.replyTo?.replyToTopId,
-        topicId: m.forumTopic?.topThreadMessage ?? m.topicId,
-        text: m.message,
-      });
+      };
+      if (normalizeFromId(m) != null) obj.fromId = normalizeFromId(m);
+      if (rt.replyToMsgId != null) obj.replyToId = rt.replyToMsgId;
+      if (rt.replyToTopId != null) obj.replyToTopId = rt.replyToTopId;
+      if (m.topicId != null) obj.topicId = m.topicId;
+      if (m.message) obj.text = m.message as string;
+
+      all.push(obj as RawMsg);
     }
 
-    offsetId = msgs[msgs.length - 1].id;
+    offsetId = (msgs[msgs.length - 1]?.id as number) ?? offsetId;
   }
 
   return all;
+}
+
+function jsonReplacer(_k: string, v: any) {
+  return typeof v === "bigint" ? Number(v) : v;
+}
+
+export async function debugDumpRaw(
+  client: any,
+  chat: string | number,
+  limit = 20
+) {
+  const peer = await client.getEntity(chat);
+  const res = await client.invoke(new Api.messages.GetHistory({ peer, limit }));
+  const msgs = ("messages" in res ? res.messages : []) as any[];
+  fs.writeFileSync("raw-sample.json", JSON.stringify(msgs, jsonReplacer, 2));
+  console.log("Saved raw-sample.json with", msgs.length, "items");
 }
